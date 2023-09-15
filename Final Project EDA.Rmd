@@ -1,0 +1,260 @@
+---
+title: "Final Project EDA"
+author: "Timila Kulkarni"
+date: '2023-05-23'
+output: html_document
+---
+
+```{r setup}
+# clear objects
+rm(list=ls())
+
+# install packages
+#install.packages("glmnet")
+library(glmnet)  # for ridge & lasso (as well as elastic-net)
+#install.packages("hdm")
+library(hdm)  # for double-lasso
+
+# load package to read excel file
+library(readxl)
+
+#install.packages("tensorflow")
+library(reticulate)  # configure R with a Python installation it can use
+#path_to_python <- install_python()  # no need to run if Python is already installed, run "which python" in Terminal to get path_to_python
+#virtualenv_create("r-reticulate", python=path_to_python)  # or python="..."
+library(tensorflow)
+#install.packages("keras")
+library(keras)  # for NN
+#install_keras(envname="r-reticulate")  # install TensorFlow
+
+```
+
+```{r read excel}
+# read each sheet of excel file as dataframes in a list
+library(readxl)    
+read_data <- function(filename, tibble = FALSE) {
+    sheets <- readxl::excel_sheets(filename)
+    x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+    x <- lapply(x, as.data.frame)
+    names(x) <- sheets
+    x
+}
+
+
+energy <- read_data("bp-stats-review-2022-all-data.xlsx")
+```
+
+```{r cleanup}
+### CO2 Emissions
+co2_em <- energy[["CO2 Emissions from Energy"]]
+#remove NA rows
+co2_em<-na.omit(co2_em)
+# rename columns
+colnames(co2_em) <- co2_em[1, ]
+colnames(co2_em)[1] = "Country"
+# remove irrelevant rows
+co2_em <- co2_em[-1, ]
+co2_em_countries <- co2_em[!grepl("Total", co2_em$Country), ]
+
+### CO2 Emissions from Flaring
+co2_flar_em <- energy[["CO2 from Flaring"]]
+#remove NA rows
+co2_flar_em<-na.omit(co2_flar_em)
+# rename columns
+colnames(co2_flar_em) <- co2_flar_em[1, ]
+colnames(co2_flar_em)[1] = "Country"
+# remove irrelevant rows
+co2_flar_em <- co2_flar_em[-1, ]
+co2_flar_em_countries <- co2_flar_em[!grepl("Total", co2_flar_em$Country), ]
+
+### CO2 Equivalent emissions from methane and process emissions
+meth_em <- energy[["CO2e Methane, Process emissions"]]
+#remove NA rows
+meth_em<-na.omit(meth_em)
+# rename columns
+colnames(meth_em) <- meth_em[1, ]
+colnames(meth_em)[1] = "Country"
+# remove irrelevant rows
+meth_em <- meth_em[-1, ]
+meth_em_countries <- meth_em[!grepl("Total", meth_em$Country), ]
+
+### CO2 Equivalent emissions from energy, methane, flaring and process emissions
+co2e_em <- energy[["CO2e Emissions"]]
+#remove NA rows
+co2e_em<-na.omit(co2e_em)
+# rename columns
+colnames(co2e_em) <- co2e_em[1, ]
+colnames(co2e_em)[1] = "Country"
+# remove irrelevant rows
+co2e_em <- co2e_em[-1, ]
+co2e_em_countries <- co2e_em[!grepl("Total", co2e_em$Country), ]
+
+### Renewable Energy Consumption
+renew_cons <- energy[["Renewables Consumption - EJ"]]
+#remove NA rows
+renew_cons <- na.omit(renew_cons)
+# rename columns
+colnames(renew_cons) <- renew_cons[1, ]
+colnames(renew_cons)[1] = "Country"
+# remove irrelevant rows
+renew_cons <- renew_cons[-1, ]
+renew_cons_countries <- renew_cons[!grepl("Total", renew_cons$Country), ]
+
+### Oil Consumption
+oil_cons <- energy[["Oil Consumption - EJ"]]
+#remove NA rows
+oil_cons <- na.omit(oil_cons)
+# rename columns
+colnames(oil_cons) <- oil_cons[1, ]
+colnames(oil_cons)[1] = "Country"
+# remove irrelevant rows
+oil_cons <- oil_cons[-1, ]
+oil_cons_countries <- oil_cons[!grepl("Total", oil_cons$Country), ]
+
+### Gas Consumption
+gas_cons <- energy[["Gas Consumption - EJ"]]
+#remove NA rows
+gas_cons <- na.omit(gas_cons)
+# rename columns
+colnames(gas_cons) <- gas_cons[1, ]
+colnames(gas_cons)[1] = "Country"
+# remove irrelevant rows
+gas_cons <- gas_cons[-1, ]
+gas_cons_countries <- gas_cons[!grepl("Total", gas_cons$Country), ]
+
+### Coal Consumption
+coal_cons <- energy[["Coal Consumption - EJ"]]
+#remove NA rows
+coal_cons <- na.omit(coal_cons)
+# rename columns
+colnames(coal_cons) <- coal_cons[1, ]
+colnames(coal_cons)[1] = "Country"
+# remove irrelevant rows
+coal_cons <- coal_cons[-1, ]
+coal_cons_countries <- coal_cons[!grepl("Total", coal_cons$Country), ]
+
+### Nuclear Consumption
+nuc_cons <- energy[["Nuclear Consumption - EJ"]]
+#remove NA rows
+nuc_cons <- na.omit(nuc_cons)
+# rename columns
+colnames(nuc_cons) <- nuc_cons[1, ]
+colnames(nuc_cons)[1] = "Country"
+# remove irrelevant rows
+nuc_cons <- nuc_cons[-1, ]
+nuc_cons_countries <- nuc_cons[!grepl("Total", nuc_cons$Country), ]
+
+### Hydroelectricity Consumption
+hydro_cons <- energy[["Hydro Consumption - EJ"]]
+#remove NA rows
+hydro_cons <- na.omit(hydro_cons)
+# rename columns
+colnames(hydro_cons) <- hydro_cons[1, ]
+colnames(hydro_cons)[1] = "Country"
+# remove irrelevant rows
+hydro_cons <- hydro_cons[-1, ]
+hydro_cons_countries <- hydro_cons[!grepl("Total", hydro_cons$Country), ]
+
+```
+
+```{r combine}
+library(dplyr)
+
+growth1 <- data.frame(co2_em$'2011-21', renew_cons$'2011-21', oil_cons$'2011-21', gas_cons$'2011-21', coal_cons$'2011-21', nuc_cons$'2011-21', hydro_cons$'2011-21')
+
+growth1 <- growth1 %>% 
+  rename("CO2 Emissions"=1, "Renewables"=2, "Oil"=3, "Gas"=4, "Coal"=5, "Nuclear"=6, "Hydroelectricity"=7)
+
+growth1[growth1=='-'] <- 0
+na.omit(growth1)
+
+names(growth1)
+
+```
+
+
+```{r training}
+y <- growth1$'CO2 Emissions'
+x <- data.matrix(growth1[, c('Renewables', 'Oil', 'Gas', 'Coal', 'Nuclear', 'Hydroelectricity')])
+
+set.seed(123)
+train <- sample(1:nrow(x), 0.5*nrow(x), replace = FALSE)  # half training, half test
+
+y[57] <- 0
+y <- as.numeric(y)
+x.test <- x[-train,]
+y.test <- y[-train]
+
+```
+
+```{r multiple regression}
+lm.out <- lm(y~x)
+summary(lm.out)
+
+## logistic regression
+glm.fits <- glm(y~x)
+summary(glm.fits)
+```
+
+```{r LASSO}
+lasso.mod <- glmnet(x[train,], y[train], alpha=1)
+lasso.mod
+plot(lasso.mod)  # coefficient paths
+
+set.seed(123)
+cv.out <- cv.glmnet(x[train,], y[train], alpha=1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam
+lasso.pred <- predict(lasso.mod, s=bestlam, newx = x.test)
+mean((lasso.pred - y.test)^2) # test MSE is 0.000430459
+
+out <- glmnet(x, y, alpha=1)
+lasso.coef <- predict(out, type="coefficients", s=bestlam)
+lasso.coef  # a few coefficients are exactly zero
+lasso.coef[lasso.coef!=0]  # extract nonzero coefficients
+
+```
+
+```{r Double LASSO}
+double.lasso <- rlassoEffects(x, y, method="double selection")
+summary(double.lasso)
+```
+
+```{r Ridge}
+ridge.mod <- glmnet(x, y, alpha=0)
+ridge.mod
+dim(coef(ridge.mod))  # each column corresponds to a model using a different lambda
+ridge.mod$lambda[50]  # lambda in the middle of the grid
+coef(ridge.mod)[,50]  # coefficients obtained from using this lambda
+sqrt(sum(coef(ridge.mod)[-1, 50]^2))  # L2 norm of beta is 0.0001419149
+
+ridge.mod <- glmnet(x[train,], y[train], alpha=0)
+ridge.pred <- predict(ridge.mod, s=4, newx=x.test)  # predict on test set, use lambda=4
+mean((ridge.pred - y.test)^2)  # test MSE is 0.0008347066
+
+## Intercept-only model vs ridge with extremely large lambda
+mean((mean(y[train]) - y.test)^2)  # intercept=mean(y[train]), very inflexible
+ridge.pred <- predict(ridge.mod, s=1e10, newx=x.test)
+mean((ridge.pred - y.test)^2)  # almost same test MSE, 0.0008411123
+
+set.seed(123)
+cv.out <- cv.glmnet(x[train,], y[train], alpha=0)  # default is 10-fold, and we use the default grid (we can try our grid as well)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+bestlam  # best lambda is 0.003880963
+
+ridge.pred <- predict(ridge.mod, s=bestlam, newx=x.test)  # use the best lambda we just found to estimate the test error
+mean((ridge.pred - y.test)^2)  # test MSE is 0.0004150436
+
+# Using the whole data and the best lambda, take a look at the coefficients
+out <- glmnet(x, y, alpha=0)  # whole data, default grid
+#predict(out, type="coefficients", s=bestlam)[1:20,]  # no variable selection
+
+
+```
+
+
+
+
+
